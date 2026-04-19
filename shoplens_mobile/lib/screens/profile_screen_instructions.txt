@@ -1,0 +1,17 @@
+﻿// Add these imports at the top of your profile_screen.dart
+import '../widgets/verification_button.dart';
+import 'seller_verification_screen.dart';
+
+// Add this method in your _ProfileScreenState class:
+void _navigateToVerification() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const SellerVerificationScreen()),
+  );
+}
+
+// Add this button where you want it in your build method:
+// VerificationButton(
+//   onTap: _navigateToVerification,
+//   isVerified: false, // Change based on user's verification status
+// )

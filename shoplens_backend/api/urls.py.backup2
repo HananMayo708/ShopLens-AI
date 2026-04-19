@@ -1,0 +1,8 @@
+﻿from django.urls import path
+from .views import search_views
+
+urlpatterns = [
+    path('search/', search_views.search_products, name='search_products'),
+    path('search/result/<str:task_id>/', search_views.get_search_results, name='search_results'),
+    path('product/<str:product_id>/', search_views.get_product_details, name='product_details'),
+]

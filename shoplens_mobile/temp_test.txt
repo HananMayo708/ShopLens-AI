@@ -1,0 +1,30 @@
+﻿import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+// Add this method inside your HomeScreen class
+Future<void> _testDirectConnection() async {
+  try {
+    final url = 'http://127.0.0.1:8000/api/search/?q=iphone';
+    print('Testing: ');
+    final response = await http.get(Uri.parse(url));
+    print('Status: ');
+    print('Response: ');
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['task_id'] != null) {
+        print('✅ Got task_id: ');
+        
+        // Wait and check result
+        await Future.delayed(const Duration(seconds: 3));
+        final resultUrl = 'http://127.0.0.1:8000/api/search/result//';
+        final resultResponse = await http.get(Uri.parse(resultUrl));
+        print('Result status: ');
+        print('Result: ');
+      }
+    }
+  } catch (e) {
+    print('❌ Error: ');
+  }
+}

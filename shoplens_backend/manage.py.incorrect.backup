@@ -1,0 +1,249 @@
+import requests
+from django.conf import settings
+import logging
+from typing import Dict, List, Optional
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
+
+class RapidAPIProductService:
+    """
+    Service class to interact with RapidAPI product APIs
+    Supports multiple e-commerce APIs through RapidAPI
+    """
+    
+    def __init__(self):
+        self.api_key = settings.RAPIDAPI_KEY
+        self.api_host = settings.RAPIDAPI_HOST  # The specific API host you're using
+        self.base_url = f"https://{self.api_host}"
+        self.headers = {
+            "X-RapidAPI-Key": self.api_key,
+            "X-RapidAPI-Host": self.api_host
+        }
+    
+    def search_products(self, query: str, page: int = 1, limit: int = 20) -> Dict:
+        """
+        Search for products using the RapidAPI
+        """
+        cache_key = f"rapidapi_search_{query}_{page}_{limit}"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return cached_result
+        
+        try:
+            # This is a generic endpoint structure - adjust based on your specific API
+            endpoint = f"{self.base_url}/products/search"
+            params = {
+                'q': query,
+                'page': page,
+                'limit': limit
+            }
+            
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                params=params,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            # Cache for 1 hour
+            cache.set(cache_key, result, 3600)
+            
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"RapidAPI request failed: {str(e)}")
+            return {'error': str(e), 'products': []}
+    
+    def get_product_details(self, product_id: str) -> Optional[Dict]:
+        """
+        Get detailed information about a specific product
+        """
+        cache_key = f"rapidapi_product_{product_id}"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return cached_result
+        
+        try:
+            endpoint = f"{self.base_url}/products/{product_id}"
+            
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            # Cache for 24 hours
+            cache.set(cache_key, result, 86400)
+            
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch product details: {str(e)}")
+            return None
+    
+    def get_products_by_category(self, category: str, page: int = 1) -> Dict:
+        """
+        Get products by category
+        """
+        cache_key = f"rapidapi_category_{category}_{page}"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return cached_result
+        
+        try:
+            endpoint = f"{self.base_url}/products/category/{category}"
+            params = {'page': page}
+            
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                params=params,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            cache.set(cache_key, result, 3600)
+            
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch category products: {str(e)}")
+            return {'error': str(e), 'products': []}
+    
+    def get_trending_products(self) -> List[Dict]:
+        """
+        Get trending products
+        """
+        cache_key = "rapidapi_trending"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return cached_result
+        
+        try:
+            endpoint = f"{self.base_url}/products/trending"
+            
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            # Cache for 6 hours
+            cache.set(cache_key, result, 21600)
+            
+            return result.get('products', [])
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch trending products: {str(e)}")
+            return []
+    
+    def get_deals(self) -> List[Dict]:
+        """
+        Get products with deals/discounts
+        """
+        cache_key = "rapidapi_deals"
+        cached_result = cache.get(cache_key)
+        
+        if cached_result:
+            return cached_result
+        
+        try:
+            endpoint = f"{self.base_url}/products/deals"
+            
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            cache.set(cache_key, result, 10800)  # 3 hours cache
+            
+            return result.get('deals', [])
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch deals: {str(e)}")
+            return []
+
+
+# Specific implementations for popular RapidAPI e-commerce APIs
+
+class AliExpressAPIService(RapidAPIProductService):
+    """AliExpress API through RapidAPI"""
+    
+    def __init__(self):
+        super().__init__()
+        self.api_host = "ali-express1.p.rapidapi.com"  # Example host
+    
+    def search_products(self, query: str, page: int = 1, limit: int = 20) -> Dict:
+        endpoint = f"{self.base_url}/products/search"
+        params = {
+            'query': query,
+            'page': page,
+            'limit': limit
+        }
+        # Implementation specific to AliExpress API
+
+
+class AmazonAPIService(RapidAPIProductService):
+    """Amazon API through RapidAPI"""
+    
+    def __init__(self):
+        super().__init__()
+        self.api_host = "amazon-product-data6.p.rapidapi.com"  # Example host
+    
+    def search_products(self, query: str, page: int = 1, limit: int = 20) -> Dict:
+        endpoint = f"{self.base_url}/product-search"
+        params = {
+            'q': query,
+            'page': page,
+            'size': limit
+        }
+        # Implementation specific to Amazon API
+
+
+class EBayAPIService(RapidAPIProductService):
+    """eBay API through RapidAPI"""
+    
+    def __init__(self):
+        super().__init__()
+        self.api_host = "ebay-data-scraper.p.rapidapi.com"  # Example host
+    
+    def search_products(self, query: str, page: int = 1, limit: int = 20) -> Dict:
+        endpoint = f"{self.base_url}/search"
+        params = {
+            'q': query,
+            'page': page,
+            'limit': limit
+        }
+        # Implementation specific to eBay API
+
+
+class WalmartAPIService(RapidAPIProductService):
+    """Walmart API through RapidAPI"""
+    
+    def __init__(self):
+        super().__init__()
+        self.api_host = "walmart-product-data.p.rapidapi.com"  # Example host
+    
+    def search_products(self, query: str, page: int = 1, limit: int = 20) -> Dict:
+        endpoint = f"{self.base_url}/products/search"
+        params = {
+            'query': query,
+            'page': page,
+            'limit': limit
+        }
+        # Implementation specific to Walmart API

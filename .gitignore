@@ -1,0 +1,56 @@
+﻿# Python virtual environment (DO NOT UPLOAD)
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Environment variables (contains API keys)
+.env
+.env.local
+.env.*.local
+
+# Database
+*.sqlite3
+db.sqlite3
+
+# Django
+*.log
+media/
+staticfiles/
+
+# Flutter build files
+build/
+.pub/
+.DartTool/
+*.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# AI Models (large files)
+*.h5
+*.pkl
+*.bin
+*.onnx
+*.pb
+
+# Uploads
+media/uploads/
+user_uploads/

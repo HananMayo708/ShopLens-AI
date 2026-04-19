@@ -1,0 +1,69 @@
+name: shoplens_mobile
+description: "ShopLens AI - Smart Shopping Assistant"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI Components
+  google_fonts: ^6.1.0
+  animate_do: ^3.1.2
+  shimmer: ^3.0.0
+  cached_network_image: ^3.3.0
+  flutter_staggered_animations: ^1.1.0  # For staggered animations
+  
+  # State Management
+  provider: ^6.1.1
+  
+  # Networking
+  http: ^1.1.0
+  dio: ^5.4.0  # Alternative HTTP client with more features
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0  # For secure token storage
+  
+  # Image Picker (for image search)
+  image_picker: ^1.0.4
+  image_picker_web: ^3.1.1  # For web support
+  
+  # Image & File Handling
+  path_provider: ^2.1.5
+  path: ^1.9.0
+  
+  # Device Info
+  device_info_plus: ^9.1.0
+  
+  # URL Launcher
+  url_launcher: ^6.2.2
+  
+  # Icons
+  cupertino_icons: ^1.0.6
+  font_awesome_flutter: ^10.7.0  # For additional icons
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # Assets section for images and fonts
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/placeholders/
+  
+  # Custom fonts (optional)
+  # fonts:
+  #   - family: CustomFont
+  #     fonts:
+  #       - asset: assets/fonts/CustomFont-Regular.ttf

@@ -1,0 +1,696 @@
+﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../models/product_model.dart';
+import '../providers/compare_provider.dart';
+
+class CompareScreen extends StatefulWidget {
+  const CompareScreen({super.key});
+
+  @override
+  State<CompareScreen> createState() => _CompareScreenState();
+}
+
+class _CompareScreenState extends State<CompareScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<CompareProvider>(context, listen: false);
+      provider.loadProductsForComparison();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'Compare Products',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: const Color(0xFF4F46E5),
+        foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Group Comparison'),
+            Tab(text: 'Side by Side'),
+          ],
+        ),
+      ),
+      body: Consumer<CompareProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              // Group Comparison Tab
+              _buildGroupComparison(provider),
+              
+              // Side by Side Comparison Tab
+              _buildSideBySideComparison(provider),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Group Comparison Tab ──────────────────────────────────────────
+  Widget _buildGroupComparison(CompareProvider provider) {
+    final groups = provider.filterGroupsBySearch(_searchQuery);
+    
+    if (groups.isEmpty) {
+      return _buildEmptyState(provider);
+    }
+
+    return Column(
+      children: [
+        // Search Bar
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            decoration: InputDecoration(
+              hintText: 'Search products...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (value) {
+              setState(() => _searchQuery = value);
+            },
+          ),
+        ),
+        
+        // Stats Bar
+        _buildStatsBar(provider),
+        
+        // Groups List
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: groups.length,
+            itemBuilder: (context, index) {
+              final entry = groups.entries.elementAt(index);
+              return _buildProductGroup(entry.key, entry.value, provider);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsBar(CompareProvider provider) {
+    final stats = provider.getStats();
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem(
+            '${stats['totalGroups']}',
+            'Product Groups',
+            Icons.group,
+          ),
+          _buildStatItem(
+            '${stats['uniqueStores']}',
+            'Stores',
+            Icons.store,
+          ),
+          _buildStatItem(
+            '${stats['totalProducts']}',
+            'Total Items',
+            Icons.shopping_bag,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String value, String label, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF4F46E5)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF4F46E5),
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 10,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductGroup(String groupName, List<Product> products, CompareProvider provider) {
+    final bestImageProduct = provider.getBestImageProduct(products);
+    final priceRange = provider.getPriceRangeForGroup(products);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Group Header with Image
+            Row(
+              children: [
+                // Product Image
+                if (bestImageProduct != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      bestImageProduct.imageUrl ?? '',
+                      height: 60,
+                      width: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stack) => Container(
+                        height: 60,
+                        width: 60,
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 12),
+                
+                // Group Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        groupName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${products.length} stores • \$${priceRange['min']?.toStringAsFixed(2)} - \$${priceRange['max']?.toStringAsFixed(2)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Store List with Seller Verification
+            ...products.map((product) => _buildStoreRow(product, provider)).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStoreRow(Product product, CompareProvider provider) {
+    final badgeColor = provider.getSellerBadgeColor(product);
+    final badgeText = provider.getSellerBadgeText(product);
+    final isVerified = provider.isSellerVerified(product);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          // Store Logo/Icon
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: badgeColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.store,
+              size: 16,
+              color: badgeColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          
+          // Store Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      product.source ?? 'Unknown Store',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Verification Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: badgeColor.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isVerified ? Icons.verified : Icons.warning_amber_rounded,
+                            size: 10,
+                            color: badgeColor,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            badgeText,
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Price
+                Text(
+                  '\$${product.price.toStringAsFixed(2)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF4F46E5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // View Button
+          IconButton(
+            icon: const Icon(Icons.arrow_forward_ios, size: 16),
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/product',
+                arguments: product,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Side by Side Comparison Tab ──────────────────────────────────
+  Widget _buildSideBySideComparison(CompareProvider provider) {
+    if (provider.allProducts.isEmpty) {
+      return _buildEmptyState(provider);
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Feature names column
+            _buildFeatureColumn(),
+            // Product columns (take first 3 products as example)
+            ...provider.allProducts.take(3).map((product) => 
+              _buildProductComparisonColumn(product, provider)
+            ).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureColumn() {
+    return Container(
+      width: 120,
+      margin: const EdgeInsets.only(right: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 100), // Space for product image
+          _buildFeatureRow('Price'),
+          _buildFeatureRow('Seller'),
+          _buildFeatureRow('Seller Status'),
+          _buildFeatureRow('Trust Score'),
+          _buildFeatureRow('Rating'),
+          _buildFeatureRow('Returns Policy'),
+          _buildFeatureRow('Shipping Speed'),
+          _buildFeatureRow('Years in Business'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow(String label) {
+    return Container(
+      height: 50,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey.shade700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductComparisonColumn(Product product, CompareProvider provider) {
+    final badgeColor = provider.getSellerBadgeColor(product);
+    final badgeText = provider.getSellerBadgeText(product);
+    final isVerified = provider.isSellerVerified(product);
+    final trustScore = provider.getTrustScore(product);
+    final returnsPolicy = provider.getReturnsPolicy(product);
+    final shippingSpeed = provider.getShippingSpeed(product);
+    
+    return Container(
+      width: 200,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade200,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Product Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              product.imageUrl ?? 'https://via.placeholder.com/150',
+              height: 100,
+              width: 100,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) => Container(
+                height: 100,
+                width: 100,
+                color: Colors.grey.shade200,
+                child: Icon(Icons.image_not_supported, color: Colors.grey.shade400),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Product Name
+          Text(
+            product.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Price
+          Text(
+            '\$${product.price.toStringAsFixed(2)}',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF4F46E5),
+            ),
+          ),
+          const Divider(height: 24),
+          
+          // Seller Info with Badge
+          Column(
+            children: [
+              Text(
+                product.source ?? 'Unknown',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: badgeColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isVerified ? Icons.verified : Icons.warning_amber_rounded,
+                      size: 14,
+                      color: badgeColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      badgeText,
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: badgeColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          const Divider(height: 24),
+          
+          // Trust Score
+          _buildInfoRow('Trust Score', '$trustScore/100', Icons.verified, trustScore > 80 ? Colors.green : Colors.orange),
+          
+          const Divider(height: 12),
+          
+          // Rating
+          _buildRatingRow(product.rating),
+          
+          const Divider(height: 12),
+          
+          // Returns Policy
+          _buildInfoRow('Returns', returnsPolicy, Icons.autorenew_rounded, Colors.green),
+          
+          const Divider(height: 12),
+          
+          // Shipping Speed
+          _buildInfoRow('Shipping', shippingSpeed, Icons.local_shipping_rounded, Colors.blue),
+          
+          const Divider(height: 12),
+          
+          // Years in Business
+          _buildInfoRow('Since', '${provider.getSellerVerification(product)['yearsInBusiness']} years', Icons.history_rounded, Colors.purple),
+          
+          const SizedBox(height: 16),
+          
+          // View Details Button
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/product',
+                arguments: product,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4F46E5),
+              minimumSize: const Size(double.infinity, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('View Details'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingRow(double? rating) {
+    if (rating == null) {
+      return const Text('No ratings');
+    }
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.star,
+          size: 16,
+          color: Colors.amber.shade600,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          rating.toStringAsFixed(1),
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '(120 reviews)',
+          style: GoogleFonts.poppins(
+            fontSize: 10,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(CompareProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.compare_arrows,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No products to compare',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Add products from search results to compare',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: provider.isLoading 
+                ? null 
+                : () => provider.loadProductsForComparison(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4F46E5),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: provider.isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Text('Load Products'),
+          ),
+        ],
+      ),
+    );
+  }
+}
