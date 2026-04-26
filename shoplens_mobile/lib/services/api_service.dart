@@ -292,6 +292,7 @@ class ApiService {
 
   // ========== PRODUCT METHODS ==========
 
+  // PRIMARY: Multi-Store Search (Real-time data from 5+ websites in parallel)
   static Future<List<Product>> searchProducts(String query,
       {int limit = 20}) async {
     try {
@@ -299,16 +300,17 @@ class ApiService {
       final token = await getAccessToken();
       if (token == null) return [];
 
-      print('🔍 ApiService searching for: "$query"');
-      final searchUrl = '$url/rapidapi/search/?q=$query&limit=$limit';
+      print('🔍 Multi-Store searching for: "$query"');
+      final searchUrl = '$url/multistore/search/?q=$query&limit=$limit';
       print('📡 URL: $searchUrl');
 
+      // Increased timeout for parallel searches (60 seconds is enough for parallel)
       final response = await http
           .get(
             Uri.parse(searchUrl),
             headers: await getHeaders(),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 90));
 
       print('📥 Response status: ${response.statusCode}');
 
@@ -320,21 +322,116 @@ class ApiService {
         List<Product> products = [];
         for (var item in productsData) {
           try {
-            final product = Product.fromJson(Map<String, dynamic>.from(item));
+            Map<String, dynamic> productMap;
+            if (item is Map<String, dynamic>) {
+              productMap = item;
+            } else if (item is Map) {
+              productMap = Map<String, dynamic>.from(item);
+            } else {
+              continue;
+            }
+
+            String productName = productMap['name']?.toString() ??
+                productMap['product_title']?.toString() ??
+                'Unknown Product';
+
+            if (productName.isEmpty || productName == 'Unknown Product') {
+              continue;
+            }
+
+            double price = 0.0;
+            if (productMap['price'] != null) {
+              if (productMap['price'] is num) {
+                price = (productMap['price'] as num).toDouble();
+              } else if (productMap['price'] is String) {
+                String priceStr = productMap['price'].toString();
+                priceStr = priceStr
+                    .replaceAll('Rs.', '')
+                    .replaceAll(',', '')
+                    .replaceAll('\$', '')
+                    .trim();
+                price = double.tryParse(priceStr) ?? 0.0;
+              }
+            }
+
+            if (price <= 0) {
+              price = 19.99;
+            }
+
+            String imageUrl = productMap['image_url']?.toString() ?? '';
+            String source = productMap['source']?.toString() ?? 'Store';
+            double rating = productMap['rating'] is num
+                ? (productMap['rating'] as num).toDouble()
+                : 4.0;
+            int reviewCount = productMap['review_count'] is num
+                ? (productMap['review_count'] as num).toInt()
+                : 0;
+            String productId = productMap['id']?.toString() ??
+                productMap['itemId']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString();
+            String description = productMap['description']?.toString() ??
+                'No description available';
+
+            final product = Product(
+              id: productId,
+              name: productName,
+              price: price,
+              imageUrl: imageUrl,
+              source: source,
+              brand: 'Generic',
+              rating: rating,
+              description: description,
+              category: 'Electronics',
+              reviewCount: reviewCount,
+              inStock: true,
+            );
             products.add(product);
           } catch (e) {
             print('⚠️ Error parsing product: $e');
           }
         }
 
-        print('✅ Successfully parsed ${products.length} products');
+        print(
+            '✅ Successfully parsed ${products.length} products from Multi-Store');
         return products;
       } else {
-        print('❌ Error response: ${response.statusCode} - ${response.body}');
+        print('❌ Error response: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      print('❌ Search error in ApiService: $e');
+      print('❌ Search error: $e');
+      return [];
+    }
+  }
+
+  // BACKUP: ScraperAPI Search (Fallback)
+  static Future<List<Product>> searchScraperAPI(String query,
+      {int limit = 20}) async {
+    try {
+      final url = await baseUrl;
+      final token = await getAccessToken();
+      if (token == null) return [];
+
+      print('🔍 ScraperAPI (backup) searching for: "$query"');
+      final searchUrl = '$url/scraperapi/search/?q=$query&limit=$limit';
+      print('📡 URL: $searchUrl');
+
+      final response = await http
+          .get(
+            Uri.parse(searchUrl),
+            headers: await getHeaders(),
+          )
+          .timeout(const Duration(seconds: 90));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonData = json.decode(response.body);
+        final List<dynamic> productsData = jsonData['products'] ?? [];
+
+        return productsData.map((item) => Product.fromJson(item)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('❌ ScraperAPI search error: $e');
       return [];
     }
   }

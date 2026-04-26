@@ -2,15 +2,19 @@
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from api.services.rapidapi_service import RapidAPIProductService
-
-rapidapi_service = RapidAPIProductService()
+from rest_framework.parsers import MultiPartParser, FormParser
+from api.services.multistore_service import MultiStoreService
+from api.services.resnet_service import ResNetService
 
 class HybridImageSearchView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def __init__(self):
+        self.multistore_service = MultiStoreService()
+        self.resnet_service = ResNetService()
     
     def post(self, request):
-        """Hybrid search using image"""
         try:
             if 'image' not in request.FILES:
                 return Response(
@@ -18,20 +22,28 @@ class HybridImageSearchView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get search terms from image (simplified for now)
-            search_terms = "product"
+            image = request.FILES['image']
             
-            # Search RapidAPI
-            web_results = rapidapi_service.search_products(search_terms)
+            # Universal image recognition - recognizes ANY object
+            print("📸 Analyzing image with ResNet50...")
+            detected = self.resnet_service.analyze_image(image)
+            
+            search_query = detected[0] if detected else "product"
+            print(f"🔍 AI recognized: {search_query}")
+            print(f"🔎 Searching stores for: {search_query}")
+            
+            # Search all stores
+            results = self.multistore_service.search_all_stores(search_query, limit=20)
             
             return Response({
                 'success': True,
-                'local_products': [],
-                'web_products': web_results.get('products', [])
+                'products': results.get('products', []),
+                'ai_detected': [search_query],
+                'search_query': search_query,
+                'total': results.get('total', 0),
+                'message': f'AI recognized this as: {search_query}'
             })
             
         except Exception as e:
-            return Response(
-                {'error': str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            print(f"❌ Image search error: {e}")
+            return Response({'error': str(e)}, status=500)

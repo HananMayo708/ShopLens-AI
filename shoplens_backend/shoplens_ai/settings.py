@@ -11,16 +11,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-r@u8sw04ij*nw+3z6f3u@=6b6eggv8ge$ft0-5oh*$vi^nevkk')
-# SerpAPI Configuration
-SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
-# ? FIXED - Allow all hosts so phone can connect
+# Allow all hosts so phone can connect
 ALLOWED_HOSTS = ['*']
 
-# APPLICATION DEFINITION
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -76,7 +74,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'shoplens_ai.wsgi.application'
 
-# DATABASE
+# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -88,7 +86,7 @@ DATABASES = {
     }
 }
 
-# PASSWORD VALIDATION
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -107,13 +105,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# INTERNATIONALIZATION
+# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Asia/Karachi'
 USE_I18N = True
 USE_TZ = True
 
-# STATIC FILES
+# Static files
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
@@ -122,7 +120,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
-# REST FRAMEWORK SETTINGS
+# REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -160,36 +158,31 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
 }
 
-# JWT SETTINGS
+# JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
-
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,
-
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
-
     'JTI_CLAIM': 'jti',
-
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
-# CORS SETTINGS
+# CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
@@ -202,14 +195,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5000",
     "http://localhost:52727",
     "http://localhost:58273",
-    # ? ADDED - allow phone IP
     "http://192.168.100.6:8000",
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:\d+$",
     r"^http://127\.0\.0\.1:\d+$",
-    r"^http://192\.168\.\d+\.\d+:\d+$",  # ? ADDED - allow all local network IPs
+    r"^http://192\.168\.\d+\.\d+:\d+$",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -234,7 +226,7 @@ CORS_ALLOW_HEADERS = [
     'refresh-token',
 ]
 
-# CSRF SETTINGS
+# CSRF Settings
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -243,14 +235,24 @@ CSRF_TRUSTED_ORIGINS = [
     "http://10.0.2.2:8000",
     "http://localhost:52727",
     "http://localhost:58273",
-    # ? ADDED - allow phone IP
     "http://192.168.100.6:8000",
 ]
 
 # RapidAPI Settings
-RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', '4be0f880c8msh87566d7907dd1b4p14dc3fjsn674ea95be70b')
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', '7fbf54c88amsh99d0a5466e50100p1660e0jsncdaa2196212c')
 RAPIDAPI_HOST = os.getenv('RAPIDAPI_HOST', 'real-time-product-search.p.rapidapi.com')
 RAPIDAPI_CACHE_TIMEOUT = int(os.getenv('RAPIDAPI_CACHE_TIMEOUT', 3600))
+
+# eBay API Settings
+EBAY_APP_ID = os.getenv('EBAY_APP_ID', 'HananMay-ShopLens-SBX-76c1164ac-f5bffdb')
+EBAY_CERT_ID = os.getenv('EBAY_CERT_ID', 'SBX-6c1164ace50a-2b2e-4060-960c-bdc7')
+EBAY_DEV_ID = os.getenv('EBAY_DEV_ID', '669231ac-56a9-4793-8f30-69ae538797bf')
+
+# SerpAPI Settings
+SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY', '3de926d2fb0b0c1135a2bbdce1e22603bef9544cdf18a463dc80982df9e0b4b1')
+
+# ScraperAPI Settings (REAL-TIME PRODUCT DATA FROM 5 WEBSITES)
+SCRAPERAPI_KEY = os.getenv('SCRAPERAPI_KEY', 'bfadc52a4692b1f678ff0dc3f40a22d4')
 
 # Cache Configuration
 CACHES = {
@@ -284,7 +286,7 @@ CELERY_TASK_STORE_EAGER_RESULT = False
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_RESULT_EXPIRES = 3600
 
-# LOGGING Configuration
+# Logging Configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
