@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/product_model.dart';
 import '../providers/compare_provider.dart';
+import '../services/currency_service.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
@@ -30,16 +31,45 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return cardType == CardType.compact
-        ? _buildCompactCard(context)
-        : _buildDetailedCard(context);
+  String _formatPrice(double usdPrice, CurrencyService currencyService) {
+    final convertedPrice = currencyService.convertPrice(usdPrice);
+    final symbol = currencyService.getCurrencySymbol();
+
+    if (currencyService.currentCurrency == Currency.PKR) {
+      return '$symbol ${convertedPrice.toStringAsFixed(0)}';
+    } else {
+      return '$symbol ${convertedPrice.toStringAsFixed(2)}';
+    }
   }
 
-  // 🔹 COMPACT CARD - For home screen
-  Widget _buildCompactCard(BuildContext context) {
+  double _getBasePrice() {
+    // Daraz.pk shows prices in PKR - convert to USD base
+    if (product.source == 'Daraz.pk') {
+      return product.price / 278.5;
+    }
+    // Use priceUsd if available
+    if (product.priceUsd != null && product.priceUsd! > 0) {
+      return product.priceUsd!;
+    }
+    // Fallback: assume current price is in USD
+    return product.price;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currencyService = Provider.of<CurrencyService>(context);
+    final basePrice = _getBasePrice();
+    final formattedPrice = _formatPrice(basePrice, currencyService);
+
+    return cardType == CardType.compact
+        ? _buildCompactCard(context, formattedPrice, currencyService)
+        : _buildDetailedCard(context, formattedPrice, currencyService);
+  }
+
+  Widget _buildCompactCard(BuildContext context, String formattedPrice,
+      CurrencyService currencyService) {
     final colorScheme = Theme.of(context).colorScheme;
+    final basePrice = _getBasePrice();
 
     return GestureDetector(
       onTap: onTap,
@@ -63,7 +93,6 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product Image
             Container(
               height: 120,
               width: double.infinity,
@@ -80,8 +109,6 @@ class ProductCard extends StatelessWidget {
                 child: _buildNetworkImage(colorScheme, fit: BoxFit.cover),
               ),
             ),
-
-            // Product Details
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(8),
@@ -89,8 +116,7 @@ class ProductCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Source/Badge
-                    if (product.source != null)
+                    if (product.source.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
@@ -101,7 +127,7 @@ class ProductCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          product.source!,
+                          product.source,
                           style: GoogleFonts.poppins(
                             fontSize: 8,
                             fontWeight: FontWeight.w500,
@@ -111,8 +137,6 @@ class ProductCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-
-                    // Product Name
                     Text(
                       product.name,
                       style: GoogleFonts.poppins(
@@ -123,15 +147,13 @@ class ProductCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-
-                    // Rating
-                    if (product.rating != null)
+                    if (product.rating > 0)
                       Row(
                         children: [
                           Icon(Icons.star, size: 10, color: Colors.amber),
                           const SizedBox(width: 2),
                           Text(
-                            product.rating!.toStringAsFixed(1),
+                            product.rating.toStringAsFixed(1),
                             style: GoogleFonts.poppins(
                               fontSize: 9,
                               fontWeight: FontWeight.w500,
@@ -140,16 +162,23 @@ class ProductCard extends StatelessWidget {
                           ),
                         ],
                       ),
-
-                    // Price
                     Text(
-                      '\$${product.price.toStringAsFixed(2)}',
+                      formattedPrice,
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
                       ),
                     ),
+                    if (currencyService.currentCurrency != Currency.USD &&
+                        basePrice > 0)
+                      Text(
+                        '\$${basePrice.toStringAsFixed(2)} USD',
+                        style: GoogleFonts.poppins(
+                          fontSize: 8,
+                          color: Colors.grey,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -160,12 +189,13 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  // 🔹 DETAILED CARD - For search screen
-  Widget _buildDetailedCard(BuildContext context) {
+  Widget _buildDetailedCard(BuildContext context, String formattedPrice,
+      CurrencyService currencyService) {
     final colorScheme = Theme.of(context).colorScheme;
     final compareProvider =
         Provider.of<CompareProvider>(context, listen: false);
     final isInCompare = compareProvider.isInComparison(product);
+    final basePrice = _getBasePrice();
 
     return GestureDetector(
       onTap: onTap,
@@ -188,7 +218,6 @@ class ProductCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product Image - Left side
             Container(
               width: 100,
               height: 100,
@@ -202,19 +231,16 @@ class ProductCard extends StatelessWidget {
                 child: _buildNetworkImage(colorScheme, fit: BoxFit.cover),
               ),
             ),
-
-            // Product Details - Right side
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Source and Price Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        if (product.source != null)
+                        if (product.source.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -225,7 +251,7 @@ class ProductCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              product.source!,
+                              product.source,
                               style: GoogleFonts.poppins(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
@@ -233,20 +259,32 @@ class ProductCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                        Text(
-                          '\$${product.price.toStringAsFixed(2)}',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              formattedPrice,
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            if (currencyService.currentCurrency !=
+                                    Currency.USD &&
+                                basePrice > 0)
+                              Text(
+                                '\$${basePrice.toStringAsFixed(2)} USD',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 8),
-
-                    // Product Name
                     Text(
                       product.name,
                       style: GoogleFonts.poppins(
@@ -257,29 +295,26 @@ class ProductCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-
                     const SizedBox(height: 6),
-
-                    // Brand and Rating Row
                     Row(
                       children: [
-                        if (product.brand != null)
+                        if (product.brand.isNotEmpty)
                           Text(
-                            product.brand!,
+                            product.brand,
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               color: colorScheme.onSurface.withOpacity(0.6),
                             ),
                           ),
-                        if (product.brand != null && product.rating != null)
+                        if (product.brand.isNotEmpty && product.rating > 0)
                           const SizedBox(width: 8),
-                        if (product.rating != null)
+                        if (product.rating > 0)
                           Row(
                             children: [
                               Icon(Icons.star, size: 12, color: Colors.amber),
                               const SizedBox(width: 2),
                               Text(
-                                product.rating!.toStringAsFixed(1),
+                                product.rating.toStringAsFixed(1),
                                 style: GoogleFonts.poppins(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
@@ -290,14 +325,10 @@ class ProductCard extends StatelessWidget {
                           ),
                       ],
                     ),
-
                     const SizedBox(height: 8),
-
-                    // Action Buttons Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Compare Button
                         IconButton(
                           icon: Icon(
                             isInCompare
@@ -310,8 +341,6 @@ class ProductCard extends StatelessWidget {
                           onPressed: () => _addToCompare(context),
                           tooltip: 'Add to compare',
                         ),
-
-                        // Wishlist Button
                         IconButton(
                           icon: const Icon(
                             Icons.favorite_border,
@@ -340,15 +369,13 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  // ✅ FIXED IMAGE WIDGET - wsrv.nl proxy (reliable CORS fix for Flutter Web)
   Widget _buildNetworkImage(ColorScheme colorScheme, {required BoxFit fit}) {
-    if (product.imageUrl == null || product.imageUrl!.isEmpty) {
+    if (product.imageUrl.isEmpty) {
       return _buildNoImage(colorScheme);
     }
 
-    // wsrv.nl is a reliable image CDN proxy that fixes CORS for Flutter Web
     final String imageUrl =
-        'https://wsrv.nl/?url=${Uri.encodeComponent(product.imageUrl!)}&w=200&h=200&fit=cover&output=jpg';
+        'https://wsrv.nl/?url=${Uri.encodeComponent(product.imageUrl)}&w=200&h=200&fit=cover&output=jpg';
 
     return Image.network(
       imageUrl,
@@ -357,9 +384,8 @@ class ProductCard extends StatelessWidget {
         'User-Agent': 'Mozilla/5.0',
       },
       errorBuilder: (context, error, stackTrace) {
-        // If wsrv.nl fails, try loading original URL directly
         return Image.network(
-          product.imageUrl!,
+          product.imageUrl,
           fit: fit,
           errorBuilder: (context, error, stackTrace) {
             return _buildNoImage(colorScheme);
@@ -377,7 +403,6 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  // Loading spinner widget
   Widget _buildLoadingSpinner(
       ColorScheme colorScheme, ImageChunkEvent loadingProgress) {
     return Center(
@@ -410,8 +435,7 @@ class ProductCard extends StatelessWidget {
   }
 }
 
-// Enum for card types
 enum CardType {
-  compact, // Vertical layout for home screen
-  detailed, // Horizontal layout for search screen
+  compact,
+  detailed,
 }

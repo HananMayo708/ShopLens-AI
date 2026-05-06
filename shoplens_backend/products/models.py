@@ -1,5 +1,6 @@
 ﻿from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.conf import settings
 import numpy as np
 
 class Category(models.Model):
@@ -41,13 +42,13 @@ class Seller(models.Model):
 class Product(models.Model):
     """Main product model - FIXED CONSTRAINTS"""
     
-    name = models.CharField(max_length=500)  # Increased from 200 to 500
+    name = models.CharField(max_length=500)
     description = models.TextField(blank=True, null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     
     # Foreign Keys
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
-    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='products')
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products', null=True, blank=True)
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='products', null=True, blank=True)
     
     # Product details
     sku = models.CharField(max_length=100, blank=True, null=True)
@@ -132,7 +133,6 @@ class ProductFeature(models.Model):
         vec1 = self.get_vector()
         vec2 = other_vector if isinstance(other_vector, np.ndarray) else np.array(other_vector)
         
-        # Cosine similarity
         dot_product = np.dot(vec1, vec2)
         norm_product = norm(vec1) * norm(vec2)
         
@@ -159,7 +159,7 @@ class Review(models.Model):
     
     class Meta:
         ordering = ['-created_at']
-        unique_together = ['product', 'user']  # One review per user per product
+        unique_together = ['product', 'user']
         indexes = [
             models.Index(fields=['product', 'rating']),
         ]
@@ -202,3 +202,95 @@ class ProductView(models.Model):
     
     def __str__(self):
         return f"{self.user.username} viewed {self.product.name}"
+
+
+# ========== PRICE ALERT MODEL ==========
+
+class PriceAlert(models.Model):
+    """
+    Store user price alerts for products
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='price_alerts')
+    product_id = models.CharField(max_length=255)
+    product_name = models.CharField(max_length=500)
+    product_url = models.CharField(max_length=1000, blank=True, null=True)
+    product_image = models.CharField(max_length=1000, blank=True, null=True)
+    target_price = models.DecimalField(max_digits=10, decimal_places=2)
+    current_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_notified = models.BooleanField(default=False)
+    source_store = models.CharField(max_length=100, default='Amazon')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['user', 'product_id']
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_notified']),
+            models.Index(fields=['product_id']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.product_name} - ${self.target_price}"
+
+
+# ========== IN-APP NOTIFICATION MODEL (ADDED) ==========
+
+class Notification(models.Model):
+    """
+    In-app notifications for price alerts and system updates
+    Shows price drop alerts, wishlist updates, etc. to users
+    """
+    NOTIFICATION_TYPES = [
+        ('price_drop', 'Price Drop'),
+        ('price_alert', 'Price Alert'),
+        ('wishlist', 'Wishlist Update'),
+        ('system', 'System Notification'),
+        ('promotion', 'Promotion'),
+    ]
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='notifications'
+    )
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(
+        max_length=20, 
+        choices=NOTIFICATION_TYPES, 
+        default='system'
+    )
+    is_read = models.BooleanField(default=False)
+    
+    # Optional links to related data
+    product_id = models.CharField(max_length=255, blank=True, null=True)
+    product_name = models.CharField(max_length=500, blank=True, null=True)
+    price_alert_id = models.IntegerField(blank=True, null=True)
+    
+    # Additional data as JSON (store price, savings, store name, etc.)
+    extra_data = models.JSONField(default=dict, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['notification_type']),
+        ]
+    
+    def mark_as_read(self):
+        """Mark notification as read"""
+        self.is_read = True
+        self.save(update_fields=['is_read'])
+    
+    def get_time_ago(self):
+        """Get human-readable time ago string"""
+        from django.utils import timezone
+        from django.utils.timesince import timesince
+        return timesince(self.created_at, timezone.now())
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.title} - {'Read' if self.is_read else 'Unread'}"

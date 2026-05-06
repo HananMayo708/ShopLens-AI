@@ -290,6 +290,67 @@ class ApiService {
     }
   }
 
+  // ========== WISHLIST METHODS (ADDED) ==========
+
+  static Future<void> addToWishlist(String productId) async {
+    try {
+      final url = await baseUrl;
+      final response = await http.post(
+        Uri.parse('$url/wishlist/'),
+        headers: await getHeaders(),
+        body: json.encode({'product_id': productId}),
+      );
+
+      if (response.statusCode != 201 && response.statusCode != 200) {
+        throw Exception('Failed to add to wishlist: ${response.statusCode}');
+      }
+      print('✅ Added to wishlist: $productId');
+    } catch (e) {
+      print('❌ Add to wishlist error: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<Product>> getWishlist() async {
+    try {
+      final url = await baseUrl;
+      final response = await http.get(
+        Uri.parse('$url/wishlist/'),
+        headers: await getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final products = data.map((item) => Product.fromJson(item)).toList();
+        print('✅ Loaded ${products.length} wishlist items');
+        return products;
+      }
+      return [];
+    } catch (e) {
+      print('❌ Get wishlist error: $e');
+      return [];
+    }
+  }
+
+  static Future<void> removeFromWishlist(String productId) async {
+    try {
+      final url = await baseUrl;
+      final response = await http.delete(
+        Uri.parse('$url/wishlist/$productId/'),
+        headers: await getHeaders(),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception(
+            'Failed to remove from wishlist: ${response.statusCode}');
+      }
+      print('✅ Removed from wishlist: $productId');
+    } catch (e) {
+      print('❌ Remove from wishlist error: $e');
+      rethrow;
+    }
+  }
+
   // ========== PRODUCT METHODS ==========
 
   // PRIMARY: Multi-Store Search (Real-time data from 5+ websites in parallel)
@@ -304,7 +365,6 @@ class ApiService {
       final searchUrl = '$url/multistore/search/?q=$query&limit=$limit';
       print('📡 URL: $searchUrl');
 
-      // Increased timeout for parallel searches (60 seconds is enough for parallel)
       final response = await http
           .get(
             Uri.parse(searchUrl),
@@ -400,38 +460,6 @@ class ApiService {
       }
     } catch (e) {
       print('❌ Search error: $e');
-      return [];
-    }
-  }
-
-  // BACKUP: ScraperAPI Search (Fallback)
-  static Future<List<Product>> searchScraperAPI(String query,
-      {int limit = 20}) async {
-    try {
-      final url = await baseUrl;
-      final token = await getAccessToken();
-      if (token == null) return [];
-
-      print('🔍 ScraperAPI (backup) searching for: "$query"');
-      final searchUrl = '$url/scraperapi/search/?q=$query&limit=$limit';
-      print('📡 URL: $searchUrl');
-
-      final response = await http
-          .get(
-            Uri.parse(searchUrl),
-            headers: await getHeaders(),
-          )
-          .timeout(const Duration(seconds: 90));
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> jsonData = json.decode(response.body);
-        final List<dynamic> productsData = jsonData['products'] ?? [];
-
-        return productsData.map((item) => Product.fromJson(item)).toList();
-      }
-      return [];
-    } catch (e) {
-      print('❌ ScraperAPI search error: $e');
       return [];
     }
   }

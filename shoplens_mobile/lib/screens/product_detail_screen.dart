@@ -5,7 +5,7 @@ import 'package:animate_do/animate_do.dart';
 import '../models/product_model.dart';
 import '../providers/product_provider.dart';
 import '../providers/compare_provider.dart';
-import '../services/price_alert_service.dart';
+import '../services/price_alert_api_service.dart';
 import '../providers/wishlist_provider.dart';
 
 class ProductDetailScreen extends StatelessWidget {
@@ -13,6 +13,78 @@ class ProductDetailScreen extends StatelessWidget {
 
   String _proxyUrl(String url) {
     return 'https://wsrv.nl/?url=${Uri.encodeComponent(url)}&w=600&h=600&fit=contain&output=jpg';
+  }
+
+  Future<void> _showSetPriceAlertDialog(
+      BuildContext context, Product product) async {
+    double targetPrice = product.price * 0.85;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Set Price Alert'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                'Get notified when ${product.name} drops to your target price'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('\$'),
+                Expanded(
+                  child: TextField(
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter target price',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      targetPrice = double.tryParse(value) ?? targetPrice;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Current price: \$${product.price.toStringAsFixed(2)}',
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final success = await PriceAlertApiService.createPriceAlert(
+                productId: product.id,
+                productName: product.name,
+                productUrl: product.productUrl,
+                productImage: product.imageUrl,
+                targetPrice: targetPrice,
+                sourceStore: product.source,
+              );
+
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      success ? 'Price alert set!' : 'Failed to set alert'),
+                  backgroundColor: success ? Colors.green : Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Set Alert'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -39,7 +111,6 @@ class ProductDetailScreen extends StatelessWidget {
       backgroundColor: colorScheme.background,
       body: CustomScrollView(
         slivers: [
-          // -- App Bar with Image -------------------------------------
           SliverAppBar(
             expandedHeight: 400,
             pinned: true,
@@ -56,7 +127,6 @@ class ProductDetailScreen extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
               ),
             ),
-            // Wishlist button in app bar top right
             actions: [
               Consumer<WishlistProvider>(
                 builder: (context, wishlist, _) {
@@ -123,15 +193,12 @@ class ProductDetailScreen extends StatelessWidget {
               ),
             ),
           ),
-
-          // -- Product Details ----------------------------------------
           SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Brand and Source Row
                   FadeInUp(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -181,8 +248,6 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Product Title
                   FadeInUp(
                     delay: const Duration(milliseconds: 100),
                     child: Text(
@@ -195,8 +260,6 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Rating Row
                   FadeInUp(
                     delay: const Duration(milliseconds: 150),
                     child: Row(
@@ -232,8 +295,6 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Price Card
                   FadeInUp(
                     delay: const Duration(milliseconds: 200),
                     child: Container(
@@ -307,8 +368,6 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // SELLER VERIFICATION CARD
                   FadeInUp(
                     delay: const Duration(milliseconds: 220),
                     child: Container(
@@ -422,8 +481,6 @@ class ProductDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // Description Section
                   FadeInUp(
                     delay: const Duration(milliseconds: 250),
                     child: Row(
@@ -479,8 +536,6 @@ class ProductDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-
-      // -- Bottom Bar -------------------------------------------------
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -496,7 +551,6 @@ class ProductDetailScreen extends StatelessWidget {
         child: SafeArea(
           child: Row(
             children: [
-              // Quantity Selector
               Container(
                 width: 120,
                 height: 50,
@@ -518,9 +572,7 @@ class ProductDetailScreen extends StatelessWidget {
                     Text(
                       '1',
                       style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     IconButton(
                       icon:
@@ -533,8 +585,6 @@ class ProductDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // Add to Cart Button
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {
@@ -551,21 +601,16 @@ class ProductDetailScreen extends StatelessWidget {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: Text(
                     'Add to Cart',
                     style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-
-              // Wishlist Button
               Consumer<WishlistProvider>(
                 builder: (context, wishlist, _) {
                   final isSaved = wishlist.isInWishlist(product);
@@ -603,6 +648,21 @@ class ProductDetailScreen extends StatelessWidget {
                   );
                 },
               ),
+              const SizedBox(width: 12),
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.notifications_active),
+                  color: colorScheme.primary,
+                  onPressed: () => _showSetPriceAlertDialog(context, product),
+                  tooltip: 'Set Price Alert',
+                ),
+              ),
             ],
           ),
         ),
@@ -622,16 +682,12 @@ class ProductDetailScreen extends StatelessWidget {
             Text(
               label,
               style: GoogleFonts.poppins(
-                fontSize: 10,
-                color: Colors.grey.shade500,
-              ),
+                  fontSize: 10, color: Colors.grey.shade500),
             ),
             Text(
               value,
               style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+                  fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -707,4 +763,3 @@ class ProductDetailScreen extends StatelessWidget {
     );
   }
 }
-

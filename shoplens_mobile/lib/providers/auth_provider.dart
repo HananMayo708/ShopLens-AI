@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../services/api_service.dart';
 import '../models/user_model.dart';
 
@@ -23,35 +24,84 @@ class AuthProvider extends ChangeNotifier {
   // Get display name
   String get displayName => _user?.fullName ?? _user?.username ?? 'Guest';
 
-  // Initialize auth state from storage
-  Future<void> initialize() async {
-    _isLoading = true;
-    notifyListeners();
+  // Constructor - load saved session immediately
+  AuthProvider() {
+    _loadSavedSession();
+  }
 
+  // Load saved session from local storage
+  Future<void> _loadSavedSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _accessToken = prefs.getString('access_token');
       _refreshToken = prefs.getString('refresh_token');
+      final userJson = prefs.getString('user_data');
 
-      if (_accessToken != null) {
-        await getCurrentUser();
+      if (_accessToken != null && userJson != null) {
+        try {
+          final Map<String, dynamic> userMap = json.decode(userJson);
+          _user = User.fromJson(userMap);
+          print('✅ Auto-login successful for: ${_user?.email}');
+          notifyListeners();
+        } catch (e) {
+          print('❌ Failed to parse saved user data: $e');
+          await _clearStorage();
+        }
+      } else {
+        print('📭 No saved session found');
       }
     } catch (e) {
-      print('Initialize error: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      print('❌ Error loading saved session: $e');
     }
   }
 
-  // Login - CHANGED parameter name from username to email
+  // Save session to local storage
+  Future<void> _saveSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_accessToken != null) {
+        await prefs.setString('access_token', _accessToken!);
+      }
+      if (_refreshToken != null) {
+        await prefs.setString('refresh_token', _refreshToken!);
+      }
+      if (_user != null) {
+        await prefs.setString('user_data', json.encode(_user!.toJson()));
+      }
+      print('✅ Session saved to local storage');
+    } catch (e) {
+      print('❌ Failed to save session: $e');
+    }
+  }
+
+  // Clear storage on logout
+  Future<void> _clearStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('access_token');
+      await prefs.remove('refresh_token');
+      await prefs.remove('user_data');
+      print('🗑️ Storage cleared');
+    } catch (e) {
+      print('❌ Failed to clear storage: $e');
+    }
+  }
+
+  // Initialize auth state (called from main)
+  Future<void> initialize() async {
+    // Session already loaded in constructor
+    // This method is kept for compatibility
+    notifyListeners();
+  }
+
+  // Login
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      print('🔐 Login provider attempt for: $email');
+      print('🔐 Login attempt for: $email');
       final response = await ApiService.login(email, password);
 
       if (response != null && response['user'] != null) {
@@ -59,49 +109,40 @@ class AuthProvider extends ChangeNotifier {
         _accessToken = response['access'];
         _refreshToken = response['refresh'];
 
+        // Save to local storage
+        await _saveSession();
+
         _isLoading = false;
         notifyListeners();
-        print('✅ Login provider successful for: ${_user?.username}');
+        print('✅ Login successful for: ${_user?.username}');
         return true;
       } else {
-        // Handle specific error messages
         if (response != null) {
-          // Check for email field errors
           if (response['email'] != null) {
-            if (response['email'] is List) {
-              _error = response['email'][0];
-            } else {
-              _error = response['email'].toString();
-            }
-          }
-          // Check for non_field_errors
-          else if (response['non_field_errors'] != null) {
-            if (response['non_field_errors'] is List) {
-              _error = response['non_field_errors'][0];
-            } else {
-              _error = response['non_field_errors'].toString();
-            }
-          }
-          // Check for message
-          else if (response['message'] != null) {
+            _error = response['email'] is List
+                ? response['email'][0]
+                : response['email'].toString();
+          } else if (response['non_field_errors'] != null) {
+            _error = response['non_field_errors'] is List
+                ? response['non_field_errors'][0]
+                : response['non_field_errors'].toString();
+          } else if (response['message'] != null) {
             _error = response['message'];
-          }
-          // Fallback
-          else {
+          } else {
             _error = 'Invalid credentials';
           }
         } else {
           _error = 'Login failed - no response from server';
         }
 
-        print('❌ Login provider failed: $_error');
+        print('❌ Login failed: $_error');
         _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = e.toString();
-      print('❌ Login provider error: $e');
+      print('❌ Login error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -115,7 +156,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      print('📝 Register provider attempt for: ${userData['email']}');
+      print('📝 Register attempt for: ${userData['email']}');
       final response = await ApiService.register(userData);
 
       if (response != null && response['user'] != null) {
@@ -123,65 +164,48 @@ class AuthProvider extends ChangeNotifier {
         _accessToken = response['access'];
         _refreshToken = response['refresh'];
 
+        // Save to local storage
+        await _saveSession();
+
         _isLoading = false;
         notifyListeners();
-        print('✅ Register provider successful');
+        print('✅ Register successful');
         return true;
       } else {
-        // Handle specific error messages from backend
         if (response != null) {
-          // Check for email errors
           if (response['email'] != null) {
-            if (response['email'] is List) {
-              _error = response['email'][0];
-            } else {
-              _error = response['email'].toString();
-            }
-          }
-          // Check for username errors
-          else if (response['username'] != null) {
-            if (response['username'] is List) {
-              _error = response['username'][0];
-            } else {
-              _error = response['username'].toString();
-            }
-          }
-          // Check for password errors
-          else if (response['password'] != null) {
-            if (response['password'] is List) {
-              _error = response['password'][0];
-            } else {
-              _error = response['password'].toString();
-            }
-          }
-          // Check for non_field_errors
-          else if (response['non_field_errors'] != null) {
-            if (response['non_field_errors'] is List) {
-              _error = response['non_field_errors'][0];
-            } else {
-              _error = response['non_field_errors'].toString();
-            }
-          }
-          // Check for message
-          else if (response['message'] != null) {
+            _error = response['email'] is List
+                ? response['email'][0]
+                : response['email'].toString();
+          } else if (response['username'] != null) {
+            _error = response['username'] is List
+                ? response['username'][0]
+                : response['username'].toString();
+          } else if (response['password'] != null) {
+            _error = response['password'] is List
+                ? response['password'][0]
+                : response['password'].toString();
+          } else if (response['non_field_errors'] != null) {
+            _error = response['non_field_errors'] is List
+                ? response['non_field_errors'][0]
+                : response['non_field_errors'].toString();
+          } else if (response['message'] != null) {
             _error = response['message'];
-          }
-          // Fallback
-          else {
+          } else {
             _error = 'Registration failed';
           }
         } else {
           _error = 'Registration failed - no response from server';
         }
 
-        print('❌ Register provider failed: $_error');
+        print('❌ Register failed: $_error');
         _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
       _error = e.toString();
-      print('❌ Register provider error: $e');
+      print('❌ Register error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -203,8 +227,12 @@ class AuthProvider extends ChangeNotifier {
       _refreshToken = null;
       _error = null;
 
+      // Clear local storage
+      await _clearStorage();
+
       _isLoading = false;
       notifyListeners();
+      print('✅ Logout successful');
     }
   }
 
@@ -214,6 +242,7 @@ class AuthProvider extends ChangeNotifier {
       final userData = await ApiService.getCurrentUser();
       if (userData != null) {
         _user = User.fromJson(userData);
+        await _saveSession(); // Update stored user data
         notifyListeners();
       }
     } catch (e) {
@@ -230,6 +259,7 @@ class AuthProvider extends ChangeNotifier {
       final updatedUser = await ApiService.updateProfile(data);
       if (updatedUser != null) {
         _user = User.fromJson(updatedUser);
+        await _saveSession(); // Update stored user data
         _isLoading = false;
         notifyListeners();
         return true;
@@ -249,6 +279,7 @@ class AuthProvider extends ChangeNotifier {
       final response = await ApiService.refreshToken();
       if (response != null) {
         _accessToken = response['access'];
+        await _saveSession(); // Update stored token
         notifyListeners();
         return true;
       }

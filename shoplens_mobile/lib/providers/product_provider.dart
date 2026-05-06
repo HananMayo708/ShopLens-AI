@@ -38,7 +38,6 @@ class ProductProvider extends ChangeNotifier {
     await _cacheService.init();
   }
 
-  // Add to recently viewed
   void addToRecentlyViewed(Product product) {
     _recentlyViewed.removeWhere((p) => p.id == product.id);
     _recentlyViewed.insert(0, product);
@@ -48,38 +47,36 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // FORCED ONLINE MODE - Always returns true to ensure products load
   Future<bool> _hasInternet() async {
-    // FORCE ONLINE MODE - Always return true
     print('🌐 FORCE ONLINE MODE ENABLED - Always ONLINE');
     return true;
   }
 
-  // MAIN METHOD: Load products with offline-first strategy
+  // FIXED: Shows cached products instantly, fetches fresh in background
   Future<void> loadHomeProducts({bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
-    // Check internet status (always true now)
-    _isOnline = await _hasInternet();
-    print('🌐 Internet status: ${_isOnline ? "ONLINE" : "OFFLINE"}');
+    // STEP 1: Show cached products IMMEDIATELY (0 seconds)
+    await _loadFromCache();
 
-    if (_isOnline && !forceRefresh) {
-      await _fetchOnlineProducts();
-    } else if (_isOnline && forceRefresh) {
-      await _fetchOnlineProducts();
-    } else {
-      await _loadFromCache();
-    }
-
+    // STEP 2: Hide loading spinner - user sees products instantly!
     _isLoading = false;
     notifyListeners();
+
+    // STEP 3: Fetch fresh products in BACKGROUND (user doesn't wait)
+    _isOnline = await _hasInternet();
+
+    if (_isOnline && !forceRefresh) {
+      _fetchOnlineProducts(); // NO AWAIT - runs in background
+    } else if (_isOnline && forceRefresh) {
+      await _fetchOnlineProducts(); // AWAIT only for force refresh
+    }
   }
 
-  // Fetch products from API and cache them - KEEP ALL PRODUCTS
   Future<void> _fetchOnlineProducts() async {
-    print('🌐 Fetching products from API...');
+    print('🌐 Fetching fresh products from API in background...');
 
     try {
       final categories = [
@@ -87,8 +84,7 @@ class ProductProvider extends ChangeNotifier {
         'smartphone',
         'headphones',
         'gaming',
-        'home',
-        'fashion'
+        'home'
       ];
       List<Product> allProducts = [];
 
@@ -97,12 +93,10 @@ class ProductProvider extends ChangeNotifier {
         print('📦 Got ${products.length} products for category: $category');
 
         for (var product in products) {
-          // Skip invalid products (missing name or price 0)
           if (product.name == 'Unknown Product' || product.name.isEmpty) {
             continue;
           }
 
-          // Add category to product
           final updatedProduct = Product(
             id: product.id,
             name: product.name,
@@ -117,27 +111,21 @@ class ProductProvider extends ChangeNotifier {
             category: _mapCategory(category),
             reviewCount: product.reviewCount > 0 ? product.reviewCount : 100,
             inStock: product.inStock,
+            productUrl: product.productUrl,
           );
           allProducts.add(updatedProduct);
         }
       }
 
-      // KEEP ALL PRODUCTS - NO DEDUPLICATION
-      final uniqueProducts = allProducts;
-      print('📊 Keeping all ${uniqueProducts.length} products from API');
-
-      // Cache products for offline use (max 1000)
-      await _cacheService.saveProducts(uniqueProducts);
-
-      // Organize products into categories
-      _organizeProducts(uniqueProducts);
-
-      print(
-          '✅ Products organized: Featured:${_featuredProducts.length}, Total:${uniqueProducts.length}');
+      if (allProducts.isNotEmpty) {
+        await _cacheService.saveProducts(allProducts);
+        _organizeProducts(allProducts);
+        notifyListeners(); // Update UI with fresh products
+        print('✅ UI updated with ${allProducts.length} fresh products');
+      }
     } catch (e) {
       print('❌ Failed to fetch online products: $e');
       _error = e.toString();
-      await _loadFromCache();
     }
   }
 
@@ -160,19 +148,15 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // Load products from local cache (offline mode)
   Future<void> _loadFromCache() async {
     print('📦 Loading products from local cache...');
-
     final cachedProducts = await _cacheService.getCachedProducts();
 
     if (cachedProducts.isNotEmpty) {
       _organizeProducts(cachedProducts);
-      print(
-          '✅ Loaded ${cachedProducts.length} products from cache (OFFLINE MODE)');
+      print('✅ Loaded ${cachedProducts.length} products from cache (INSTANT)');
     } else {
-      print('⚠️ No cached products found. Please connect to internet first.');
-      _error = 'No offline data. Please connect to internet to load products.';
+      print('⚠️ No cached products found.');
       _featuredProducts = [];
       _popularProducts = [];
       _electronicsProducts = [];
@@ -182,38 +166,29 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  // Refresh products (force fetch from API)
   Future<void> refreshProducts() async {
     print('🔄 Force refreshing products from API...');
     await loadHomeProducts(forceRefresh: true);
   }
 
-  // Organize products into categories - WITH SHUFFLING to mix all stores
   void _organizeProducts(List<Product> products) {
     print('📊 Organizing ${products.length} products into categories...');
 
-    // SHUFFLE products to mix different stores (Amazon, eBay, Daraz, etc.)
     final shuffledProducts = List<Product>.from(products);
     shuffledProducts.shuffle();
 
-    // Show product sources for debugging
     final sources = shuffledProducts.map((p) => p.source).toSet().toList();
     print('📊 Product sources: $sources');
 
-    // Featured: Top rated products (rating >= 4.5)
     _featuredProducts =
         shuffledProducts.where((p) => (p.rating) >= 4.5).take(10).toList();
     if (_featuredProducts.isEmpty && shuffledProducts.isNotEmpty) {
       _featuredProducts = shuffledProducts.take(10).toList();
     }
 
-    // Popular: First 15 products from shuffled list
     _popularProducts = shuffledProducts.take(15).toList();
-
-    // Electronics - Show shuffled products from all stores
     _electronicsProducts = shuffledProducts.take(20).toList();
 
-    // Gaming
     _gamingProducts = shuffledProducts
         .where((p) =>
             p.name.toLowerCase().contains('gaming') ||
@@ -224,7 +199,6 @@ class ProductProvider extends ChangeNotifier {
         .take(10)
         .toList();
 
-    // Home
     _homeProducts = shuffledProducts
         .where((p) =>
             p.name.toLowerCase().contains('home') ||
@@ -234,7 +208,6 @@ class ProductProvider extends ChangeNotifier {
         .take(10)
         .toList();
 
-    // Fashion
     _fashionProducts = shuffledProducts
         .where((p) =>
             p.name.toLowerCase().contains('shoe') ||
@@ -246,7 +219,6 @@ class ProductProvider extends ChangeNotifier {
         .take(10)
         .toList();
 
-    // Fill empty categories with featured or popular products
     if (_electronicsProducts.isEmpty && _featuredProducts.isNotEmpty) {
       _electronicsProducts = _featuredProducts.take(10).toList();
     }
@@ -267,7 +239,6 @@ class ProductProvider extends ChangeNotifier {
         '📊 Categories - Featured:${_featuredProducts.length}, Electronics:${_electronicsProducts.length}, Popular:${_popularProducts.length}, Gaming:${_gamingProducts.length}, Home:${_homeProducts.length}, Fashion:${_fashionProducts.length}');
   }
 
-  // Search products locally (offline)
   List<Product> searchLocally(String query) {
     final allProducts =
         _featuredProducts + _popularProducts + _electronicsProducts;
@@ -276,7 +247,6 @@ class ProductProvider extends ChangeNotifier {
         .toList();
   }
 
-  // Get cache info
   Future<Map<String, dynamic>> getCacheInfo() async {
     return {
       'cacheSize': await _cacheService.getCacheSize(),

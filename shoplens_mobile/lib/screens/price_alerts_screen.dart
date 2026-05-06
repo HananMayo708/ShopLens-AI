@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/price_alert_service.dart';
+import '../services/price_alert_api_service.dart';
 import '../models/price_alert_model.dart';
 import '../theme/app_theme.dart';
 
@@ -13,7 +13,6 @@ class PriceAlertsScreen extends StatefulWidget {
 }
 
 class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
-  final PriceAlertService _alertService = PriceAlertService();
   List<PriceAlert> _alerts = [];
   bool _isLoading = true;
 
@@ -24,26 +23,27 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
   }
 
   Future<void> _loadAlerts() async {
-    await _alertService.init();
-    final alerts = await _alertService.getAllAlerts();
+    setState(() => _isLoading = true);
+    final alerts = await PriceAlertApiService.getPriceAlerts();
     setState(() {
       _alerts = alerts;
       _isLoading = false;
     });
   }
 
-  Future<void> _removeAlert(String alertId) async {
-    await _alertService.removeAlert(alertId);
-    await _loadAlerts();
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Price alert removed'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  Future<void> _removeAlert(PriceAlert alert) async {
+    final success = await PriceAlertApiService.deletePriceAlert(alert.id);
+    if (success) {
+      await _loadAlerts();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Price alert removed'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -119,8 +119,15 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
 
   Widget _buildAlertCard(PriceAlert alert) {
     final isTriggered = alert.isNotified;
-    final discountPercent = ((alert.currentPrice - alert.targetPrice) / alert.currentPrice * 100).round();
-    
+
+    // ✅ FIXED: Safe discount calculation - avoid division by zero
+    int discountPercent = 0;
+    if (alert.currentPrice > 0 && alert.currentPrice < alert.targetPrice) {
+      discountPercent =
+          ((alert.targetPrice - alert.currentPrice) / alert.targetPrice * 100)
+              .round();
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -132,7 +139,7 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -140,13 +147,12 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
       ),
       child: Column(
         children: [
-          // Product info row
           ListTile(
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: alert.imageUrl.isNotEmpty
+              child: alert.productImage.isNotEmpty
                   ? Image.network(
-                      alert.imageUrl,
+                      alert.productImage,
                       width: 50,
                       height: 50,
                       fit: BoxFit.cover,
@@ -183,8 +189,10 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
                       'Target: \$${alert.targetPrice.toStringAsFixed(2)}',
                       style: GoogleFonts.poppins(
                         fontSize: 12,
-                        color: isTriggered ? Colors.green : AppTheme.textSecondary,
-                        decoration: isTriggered ? TextDecoration.lineThrough : null,
+                        color:
+                            isTriggered ? Colors.green : AppTheme.textSecondary,
+                        decoration:
+                            isTriggered ? TextDecoration.lineThrough : null,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -193,7 +201,8 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isTriggered ? Colors.green : AppTheme.primaryColor,
+                        color:
+                            isTriggered ? Colors.green : AppTheme.primaryColor,
                       ),
                     ),
                   ],
@@ -202,22 +211,22 @@ class _PriceAlertsScreenState extends State<PriceAlertsScreen> {
             ),
             trailing: IconButton(
               icon: Icon(Icons.delete_outline, color: Colors.red[300]),
-              onPressed: () => _removeAlert(alert.id),
+              onPressed: () => _removeAlert(alert),
             ),
           ),
-          
-          // Price drop notification banner
-          if (isTriggered)
+          // ✅ FIXED: Only show discount message if discountPercent > 0 and isTriggered
+          if (isTriggered && discountPercent > 0)
             Container(
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.notifications_active, color: Colors.green, size: 18),
+                  const Icon(Icons.notifications_active,
+                      color: Colors.green, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(

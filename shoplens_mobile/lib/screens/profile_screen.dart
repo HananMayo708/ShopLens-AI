@@ -5,6 +5,8 @@ import 'package:animate_do/animate_do.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'seller_verification_screen.dart';
+import 'settings_screen.dart';
+import 'price_alerts_screen.dart';
 import '../widgets/verification_button.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -63,6 +65,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SellerVerificationScreen()),
+    );
+  }
+
+  void _navigateToSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SettingsScreen()),
+    );
+  }
+
+  void _navigateToPriceAlerts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PriceAlertsScreen()),
     );
   }
 
@@ -212,6 +228,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                         onTap: _navigateToVerification,
                         isVerified: false,
                       ),
+                      const SizedBox(height: 12),
+                      _buildMenuButton(
+                        icon: Icons.notifications_active_outlined,
+                        title: 'Price Alerts',
+                        subtitle: 'View and manage your price alerts',
+                        onTap: _navigateToPriceAlerts,
+                        color: AppTheme.accentColor,
+                      ),
                       const SizedBox(height: 24),
                       _buildSectionHeader('Personal Information'),
                       const SizedBox(height: 12),
@@ -288,6 +312,70 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildMenuButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required Color color,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSliverAppBar(dynamic user) {
     return SliverAppBar(
       expandedHeight: 300,
@@ -300,6 +388,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         onPressed: () => Navigator.maybePop(context),
       ),
       actions: [
+        if (!_isEditing)
+          _appBarAction(
+              icon: Icons.settings_outlined, onTap: _navigateToSettings),
         if (!_isEditing)
           _appBarAction(
               icon: Icons.edit_outlined,
@@ -351,7 +442,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: AppTheme.accentColor.withOpacity(0.15), width: 40),
+                      color: AppTheme.accentColor.withValues(alpha: 0.15),
+                      width: 40),
                 ),
               ),
             ),
@@ -373,7 +465,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             Border.all(color: AppTheme.accentColor, width: 2.5),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.accentColor.withOpacity(0.3),
+                            color: AppTheme.accentColor.withValues(alpha: 0.3),
                             blurRadius: 20,
                             spreadRadius: 2,
                           ),
@@ -417,7 +509,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             '@${user.username}',
                             style: GoogleFonts.poppins(
                               fontSize: 13,
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -425,10 +517,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppTheme.accentColor.withOpacity(0.15),
+                              color:
+                                  AppTheme.accentColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                  color: AppTheme.accentColor.withOpacity(0.4),
+                                  color: AppTheme.accentColor
+                                      .withValues(alpha: 0.4),
                                   width: 1),
                             ),
                             child: Text(
@@ -461,7 +555,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: Colors.white, size: 20),
@@ -488,7 +582,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -532,8 +626,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 height: 36,
                 decoration: BoxDecoration(
                   color: isEditable
-                      ? AppTheme.accentColor.withOpacity(0.08)
-                      : AppTheme.primaryColor.withOpacity(0.04),
+                      ? AppTheme.accentColor.withValues(alpha: 0.08)
+                      : AppTheme.primaryColor.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon,
@@ -693,11 +787,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.05),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(Icons.account_circle_outlined,
-                      size: 48, color: AppTheme.primaryColor.withOpacity(0.3)),
+                      size: 48,
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3)),
                 ),
               ),
               const SizedBox(height: 24),

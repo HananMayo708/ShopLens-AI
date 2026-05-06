@@ -84,6 +84,23 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isInitialLoad = true);
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(color: Colors.white),
+        ),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showImageSourceDialog() async {
     showModalBottomSheet(
       context: context,
@@ -155,87 +172,101 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  // Professional loading dialog - single clean message
   Future<void> _performImageSearch(XFile image) async {
     try {
       if (!mounted) return;
 
+      // Clean professional loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          contentPadding: const EdgeInsets.all(24),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text('AI is analyzing your image...',
-                  style: GoogleFonts.poppins()),
+              const SizedBox(height: 20),
+              Text(
+                'Finding similar products',
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
             ],
           ),
         ),
       );
 
+      // Read image bytes for preview
       final imageBytes = await image.readAsBytes();
       final base64Image = base64Encode(imageBytes);
       final imageBase64 = 'data:image/jpeg;base64,$base64Image';
+
+      // Call the search service
+      debugPrint('Starting image search...');
       final results = await _imageSearchService.searchByImage(image);
 
       if (!mounted) return;
       Navigator.pop(context);
 
-      if (results['ai_error'] != null) {
-        _showErrorSnackBar(results['ai_error']);
+      // Check for errors
+      if (results['success'] == false) {
+        _showErrorSnackBar(results['error'] ?? 'Image search failed');
         return;
       }
 
-      if (results['success'] == true) {
-        final List<Product> allProducts = [];
+      // Extract products from the response
+      final List<Product> allProducts = [];
 
-        if (results['local_products'] != null) {
-          for (var item in results['local_products']) {
-            if (item is Map<String, dynamic>) {
+      if (results['products'] != null && results['products'] is List) {
+        final productsList = results['products'] as List;
+        debugPrint('Found ${productsList.length} products in response');
+
+        for (var item in productsList) {
+          if (item is Map<String, dynamic>) {
+            try {
               allProducts.add(Product.fromJson(item));
+            } catch (e) {
+              debugPrint('Error parsing product: $e');
             }
           }
         }
+      }
 
-        if (results['web_products'] != null) {
-          for (var item in results['web_products']) {
-            if (item is Map<String, dynamic>) {
-              allProducts.add(Product.fromJson(item));
-            }
-          }
-        }
+      // Get AI detected label
+      String? aiLabels = results['ai_detected'] as String?;
+      if (aiLabels == null || aiLabels.isEmpty) {
+        aiLabels = 'unknown';
+      }
 
-        String? aiLabels;
-        if (results['ai_detected'] != null && results['ai_detected'] is List) {
-          aiLabels = (results['ai_detected'] as List).join(', ');
-        }
+      final int total = results['total'] ?? allProducts.length;
 
-        Provider.of<SearchProvider>(context, listen: false)
-            .setImageSearchResults(allProducts, aiLabels, imageBase64);
+      debugPrint(
+          'Image search completed: ${allProducts.length} products found');
+      debugPrint('AI Detected: $aiLabels');
+      debugPrint('Total from API: $total');
 
-        if (allProducts.isEmpty) {
-          _showErrorSnackBar('No products found matching your image');
-        }
-      } else {
-        _showErrorSnackBar(results['error'] ?? 'Image search failed');
+      // Update provider with results
+      Provider.of<SearchProvider>(context, listen: false)
+          .setImageSearchResults(allProducts, aiLabels, imageBase64);
+
+      if (allProducts.isEmpty) {
+        _showErrorSnackBar('No products found matching "$aiLabels"');
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context);
-      _showErrorSnackBar('Error: $e');
+      debugPrint('Image search error: $e');
+      _showErrorSnackBar('Error: ${e.toString()}');
     }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
@@ -731,7 +762,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 20),
             Text(
               _isImageSearching
-                  ? 'AI is analyzing your image...'
+                  ? 'Finding matching products...'
                   : 'Searching for',
               style:
                   GoogleFonts.poppins(color: AppTheme.textMuted, fontSize: 13),
@@ -948,10 +979,9 @@ class _SearchScreenState extends State<SearchScreen> {
                         borderRadius: BorderRadius.circular(20)),
                     child: Row(
                       children: [
-                        Icon(Icons.auto_awesome,
-                            size: 12, color: Colors.white),
+                        Icon(Icons.auto_awesome, size: 12, color: Colors.white),
                         const SizedBox(width: 4),
-                        Text('AI: ${provider.aiDetectedLabels}',
+                        Text(provider.aiDetectedLabels!,
                             style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.white,
@@ -1017,4 +1047,3 @@ class _DotGridPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-

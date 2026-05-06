@@ -45,7 +45,7 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Group Comparison'),
+            Tab(text: 'Price Comparison'),
             Tab(text: 'Side by Side'),
           ],
         ),
@@ -59,8 +59,8 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
           return TabBarView(
             controller: _tabController,
             children: [
-              // Group Comparison Tab
-              _buildGroupComparison(provider),
+              // Price Comparison Tab (Grouped by product)
+              _buildPriceComparisonTab(provider),
               
               // Side by Side Comparison Tab
               _buildSideBySideComparison(provider),
@@ -71,11 +71,11 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
     );
   }
 
-  // ── Group Comparison Tab ──────────────────────────────────────────
-  Widget _buildGroupComparison(CompareProvider provider) {
-    final groups = provider.filterGroupsBySearch(_searchQuery);
+  // ── Price Comparison Tab (Grouped by same product) ─────────────────
+  Widget _buildPriceComparisonTab(CompareProvider provider) {
+    final matchedProducts = provider.getMatchedProducts(_searchQuery);
     
-    if (groups.isEmpty) {
+    if (matchedProducts.isEmpty) {
       return _buildEmptyState(provider);
     }
 
@@ -109,14 +109,14 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
         // Stats Bar
         _buildStatsBar(provider),
         
-        // Groups List
+        // Product Groups List
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: groups.length,
+            itemCount: matchedProducts.length,
             itemBuilder: (context, index) {
-              final entry = groups.entries.elementAt(index);
-              return _buildProductGroup(entry.key, entry.value, provider);
+              final group = matchedProducts[index];
+              return _buildProductComparisonCard(group, provider);
             },
           ),
         ),
@@ -125,7 +125,7 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
   }
 
   Widget _buildStatsBar(CompareProvider provider) {
-    final stats = provider.getStats();
+    final stats = provider.getComparisonStats();
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -139,19 +139,19 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildStatItem(
-            '${stats['totalGroups']}',
-            'Product Groups',
-            Icons.group,
-          ),
-          _buildStatItem(
-            '${stats['uniqueStores']}',
-            'Stores',
-            Icons.store,
-          ),
-          _buildStatItem(
             '${stats['totalProducts']}',
-            'Total Items',
+            'Products',
             Icons.shopping_bag,
+          ),
+          _buildStatItem(
+            '${stats['totalMatches']}',
+            'Matched Groups',
+            Icons.compare_arrows,
+          ),
+          _buildStatItem(
+            '${stats['bestPriceStore']}',
+            'Best Price',
+            Icons.local_offer,
           ),
         ],
       ),
@@ -182,186 +182,323 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildProductGroup(String groupName, List<Product> products, CompareProvider provider) {
-    final bestImageProduct = provider.getBestImageProduct(products);
-    final priceRange = provider.getPriceRangeForGroup(products);
+  // Main Product Comparison Card - Shows same product across different stores
+  Widget _buildProductComparisonCard(ProductMatchGroup group, CompareProvider provider) {
+    // Find best price
+    final bestPrice = group.products.map((p) => p.price).reduce((a, b) => a < b ? a : b);
+    final bestPriceProduct = group.products.firstWhere((p) => p.price == bestPrice);
+    final priceRange = provider.getPriceRangeForGroup(group.products);
+    final savings = provider.getMaxSavings(group.products);
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Group Header with Image
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Product Header with Image
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Product Image
-                if (bestImageProduct != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      bestImageProduct.imageUrl ?? '',
-                      height: 60,
-                      width: 60,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) => Container(
-                        height: 60,
-                        width: 60,
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                      ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    group.representativeImage,
+                    height: 80,
+                    width: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => Container(
+                      height: 80,
+                      width: 80,
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
                     ),
                   ),
-                const SizedBox(width: 12),
+                ),
+                const SizedBox(width: 16),
                 
-                // Group Info
+                // Product Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        groupName,
+                        group.productName,
                         style: GoogleFonts.poppins(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${products.length} stores • \$${priceRange['min']?.toStringAsFixed(2)} - \$${priceRange['max']?.toStringAsFixed(2)}',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.trending_down, size: 12, color: Colors.green),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Save up to \$${savings.toStringAsFixed(2)}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Text(
+                              '${group.products.length} stores',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ],
             ),
+          ),
+          
+          // Price Comparison Table
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                // Header Row
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: const [
+                      Expanded(flex: 2, child: Text('Store', style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(child: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(child: Text('Rating', style: TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(child: Text('Shipping', style: TextStyle(fontWeight: FontWeight.bold))),
+                      SizedBox(width: 40),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                
+                // Store Rows
+                ...group.products.map((product) => _buildStorePriceRow(product, bestPrice, provider)),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Best Deal Banner
+          if (bestPriceProduct != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Best Deal on ${bestPriceProduct.source}',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          'Save \$${(group.products.map((p) => p.price).reduce((a, b) => a > b ? a : b) - bestPrice).toStringAsFixed(2)} compared to highest price',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/product',
+                        arguments: bestPriceProduct,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF4F46E5),
+                      minimumSize: const Size(100, 36),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('View Deal'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStorePriceRow(Product product, double bestPrice, CompareProvider provider) {
+    final isBestPrice = product.price == bestPrice;
+    final sellerBadge = provider.getSellerBadgeColor(product);
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: isBestPrice ? Colors.green.shade50 : null,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            // Store Name with Icon
+            Expanded(
+              flex: 2,
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: sellerBadge.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      _getStoreIcon(product.source),
+                      size: 14,
+                      color: sellerBadge,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      product.source ?? 'Unknown',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: isBestPrice ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             
-            const SizedBox(height: 16),
+            // Price
+            Expanded(
+              child: Text(
+                '\$${product.price.toStringAsFixed(2)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: isBestPrice ? FontWeight.bold : FontWeight.normal,
+                  color: isBestPrice ? Colors.green.shade700 : null,
+                ),
+              ),
+            ),
             
-            // Store List with Seller Verification
-            ...products.map((product) => _buildStoreRow(product, provider)).toList(),
+            // Rating
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(Icons.star, size: 12, color: Colors.amber.shade600),
+                  const SizedBox(width: 4),
+                  Text(
+                    product.rating?.toStringAsFixed(1) ?? 'N/A',
+                    style: GoogleFonts.poppins(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Shipping
+            Expanded(
+              child: Text(
+                provider.getShippingEstimate(product),
+                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ),
+            
+            // Action Button
+            SizedBox(
+              width: 40,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_forward_ios, size: 14),
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/product',
+                    arguments: product,
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStoreRow(Product product, CompareProvider provider) {
-    final badgeColor = provider.getSellerBadgeColor(product);
-    final badgeText = provider.getSellerBadgeText(product);
-    final isVerified = provider.isSellerVerified(product);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          // Store Logo/Icon
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: badgeColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.store,
-              size: 16,
-              color: badgeColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          
-          // Store Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      product.source ?? 'Unknown Store',
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Verification Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: badgeColor.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isVerified ? Icons.verified : Icons.warning_amber_rounded,
-                            size: 10,
-                            color: badgeColor,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            badgeText,
-                            style: GoogleFonts.poppins(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w600,
-                              color: badgeColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                // Price
-                Text(
-                  '\$${product.price.toStringAsFixed(2)}',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF4F46E5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // View Button
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios, size: 16),
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                '/product',
-                arguments: product,
-              );
-            },
-          ),
-        ],
-      ),
-    );
+  IconData _getStoreIcon(String? storeName) {
+    if (storeName == null) return Icons.store;
+    final name = storeName.toLowerCase();
+    if (name.contains('amazon')) return Icons.shopping_cart;
+    if (name.contains('ebay')) return Icons.shopping_bag;
+    if (name.contains('walmart')) return Icons.store;
+    if (name.contains('daraz')) return Icons.shopping_basket;
+    if (name.contains('aliexpress')) return Icons.public;
+    return Icons.store;
   }
 
   // ── Side by Side Comparison Tab ──────────────────────────────────
   Widget _buildSideBySideComparison(CompareProvider provider) {
-    if (provider.allProducts.isEmpty) {
+    final topProducts = provider.getTopProductsForComparison();
+    
+    if (topProducts.isEmpty) {
       return _buildEmptyState(provider);
     }
 
@@ -374,8 +511,8 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
           children: [
             // Feature names column
             _buildFeatureColumn(),
-            // Product columns (take first 3 products as example)
-            ...provider.allProducts.take(3).map((product) => 
+            // Product columns
+            ...topProducts.map((product) => 
               _buildProductComparisonColumn(product, provider)
             ).toList(),
           ],
@@ -386,20 +523,21 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
 
   Widget _buildFeatureColumn() {
     return Container(
-      width: 120,
+      width: 130,
       margin: const EdgeInsets.only(right: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 100), // Space for product image
+          const SizedBox(height: 120), // Space for product header
+          _buildFeatureRow('Store'),
           _buildFeatureRow('Price'),
-          _buildFeatureRow('Seller'),
+          _buildFeatureRow('Best Price'),
+          _buildFeatureRow('Rating'),
           _buildFeatureRow('Seller Status'),
           _buildFeatureRow('Trust Score'),
-          _buildFeatureRow('Rating'),
-          _buildFeatureRow('Returns Policy'),
-          _buildFeatureRow('Shipping Speed'),
-          _buildFeatureRow('Years in Business'),
+          _buildFeatureRow('Shipping'),
+          _buildFeatureRow('Returns'),
+          _buildFeatureRow('Availability'),
         ],
       ),
     );
@@ -407,14 +545,14 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
 
   Widget _buildFeatureRow(String label) {
     return Container(
-      height: 50,
+      height: 55,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Text(
         label,
         style: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
           color: Colors.grey.shade700,
         ),
       ),
@@ -423,19 +561,21 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
 
   Widget _buildProductComparisonColumn(Product product, CompareProvider provider) {
     final badgeColor = provider.getSellerBadgeColor(product);
-    final badgeText = provider.getSellerBadgeText(product);
     final isVerified = provider.isSellerVerified(product);
     final trustScore = provider.getTrustScore(product);
-    final returnsPolicy = provider.getReturnsPolicy(product);
-    final shippingSpeed = provider.getShippingSpeed(product);
+    final isBestPrice = provider.isBestPriceForProduct(product);
     
     return Container(
-      width: 200,
+      width: 220,
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isBestPrice ? Colors.green.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isBestPrice ? Colors.green.shade200 : Colors.grey.shade200,
+          width: isBestPrice ? 2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.shade200,
@@ -452,12 +592,12 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
             borderRadius: BorderRadius.circular(12),
             child: Image.network(
               product.imageUrl ?? 'https://via.placeholder.com/150',
-              height: 100,
-              width: 100,
+              height: 90,
+              width: 90,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stack) => Container(
-                height: 100,
-                width: 100,
+                height: 90,
+                width: 90,
                 color: Colors.grey.shade200,
                 child: Icon(Icons.image_not_supported, color: Colors.grey.shade400),
               ),
@@ -465,180 +605,204 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           
-          // Product Name
+          // Product Name (truncated)
           Text(
-            product.name,
+            product.name.length > 40 ? '${product.name.substring(0, 37)}...' : product.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
           
-          // Price
-          Text(
-            '\$${product.price.toStringAsFixed(2)}',
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF4F46E5),
+          // Store Name
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: badgeColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              product.source ?? 'Unknown',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: badgeColor,
+              ),
             ),
           ),
-          const Divider(height: 24),
           
-          // Seller Info with Badge
-          Column(
-            children: [
-              Text(
-                product.source ?? 'Unknown',
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+          const Divider(height: 20),
+          
+          // Price
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: [
+                Text(
+                  '\$${product.price.toStringAsFixed(2)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isBestPrice ? Colors.green.shade700 : const Color(0xFF4F46E5),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: badgeColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: badgeColor.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isVerified ? Icons.verified : Icons.warning_amber_rounded,
-                      size: 14,
-                      color: badgeColor,
+                if (isBestPrice)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      badgeText,
+                    child: Text(
+                      'Best Price',
                       style: GoogleFonts.poppins(
-                        fontSize: 10,
+                        fontSize: 8,
                         fontWeight: FontWeight.w600,
-                        color: badgeColor,
+                        color: Colors.green.shade700,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+              ],
+            ),
           ),
           
-          const Divider(height: 24),
-          
-          // Trust Score
-          _buildInfoRow('Trust Score', '$trustScore/100', Icons.verified, trustScore > 80 ? Colors.green : Colors.orange),
-          
-          const Divider(height: 12),
+          const Divider(height: 8),
           
           // Rating
-          _buildRatingRow(product.rating),
+          _buildComparisonRatingRow(product.rating),
           
-          const Divider(height: 12),
+          const Divider(height: 8),
           
-          // Returns Policy
-          _buildInfoRow('Returns', returnsPolicy, Icons.autorenew_rounded, Colors.green),
-          
-          const Divider(height: 12),
-          
-          // Shipping Speed
-          _buildInfoRow('Shipping', shippingSpeed, Icons.local_shipping_rounded, Colors.blue),
-          
-          const Divider(height: 12),
-          
-          // Years in Business
-          _buildInfoRow('Since', '${provider.getSellerVerification(product)['yearsInBusiness']} years', Icons.history_rounded, Colors.purple),
-          
-          const SizedBox(height: 16),
-          
-          // View Details Button
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                '/product',
-                arguments: product,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
-              minimumSize: const Size(double.infinity, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          // Seller Status Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: badgeColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text('View Details'),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isVerified ? Icons.verified : Icons.warning_amber_rounded,
+                  size: 12,
+                  color: badgeColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isVerified ? 'Verified' : 'Standard',
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: badgeColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const Divider(height: 12),
+          
+          // Trust Score
+          LinearProgressIndicator(
+            value: trustScore / 100,
+            backgroundColor: Colors.grey.shade200,
+            color: trustScore > 80 ? Colors.green : trustScore > 50 ? Colors.orange : Colors.red,
+            borderRadius: BorderRadius.circular(4),
+            minHeight: 4,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Trust Score: $trustScore/100',
+            style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey.shade600),
+          ),
+          
+          const Divider(height: 12),
+          
+          // Shipping
+          _buildComparisonInfoRow(Icons.local_shipping, provider.getShippingEstimate(product), Colors.blue),
+          
+          const Divider(height: 8),
+          
+          // Returns
+          _buildComparisonInfoRow(Icons.autorenew, provider.getReturnsPolicy(product), Colors.green),
+          
+          const Divider(height: 8),
+          
+          // Availability
+          _buildComparisonInfoRow(
+            Icons.check_circle, 
+            provider.getAvailability(product),
+            product.inStock ? Colors.green : Colors.red,
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // View Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  '/product',
+                  arguments: product,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('View Details', style: TextStyle(fontSize: 11)),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRatingRow(double? rating) {
+  Widget _buildComparisonRatingRow(double? rating) {
     if (rating == null) {
-      return const Text('No ratings');
+      return const Text('No ratings', style: TextStyle(fontSize: 11));
     }
     
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          Icons.star,
-          size: 16,
-          color: Colors.amber.shade600,
-        ),
+        const Icon(Icons.star, size: 14, color: Colors.amber),
         const SizedBox(width: 4),
         Text(
           rating.toStringAsFixed(1),
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
         ),
         const SizedBox(width: 4),
         Text(
-          '(120 reviews)',
-          style: GoogleFonts.poppins(
-            fontSize: 10,
-            color: Colors.grey.shade600,
-          ),
+          '(120)',
+          style: GoogleFonts.poppins(fontSize: 9, color: Colors.grey.shade600),
         ),
       ],
     );
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon, Color color) {
+  Widget _buildComparisonInfoRow(IconData icon, String text, Color color) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, size: 14, color: color),
+        Icon(icon, size: 12, color: color),
         const SizedBox(width: 4),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 9,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(fontSize: 10),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -666,7 +830,7 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
           ),
           const SizedBox(height: 8),
           Text(
-            'Add products from search results to compare',
+            'Search for products and add them to compare',
             style: GoogleFonts.poppins(
               fontSize: 14,
               color: Colors.grey.shade500,
@@ -693,4 +857,17 @@ class _CompareScreenState extends State<CompareScreen> with SingleTickerProvider
       ),
     );
   }
+}
+
+// Data model for matched products
+class ProductMatchGroup {
+  final String productName;
+  final List<Product> products;
+  final String representativeImage;
+  
+  ProductMatchGroup({
+    required this.productName,
+    required this.products,
+    required this.representativeImage,
+  });
 }

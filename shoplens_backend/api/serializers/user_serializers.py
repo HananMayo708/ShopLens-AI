@@ -104,7 +104,7 @@ class LoginSerializer(serializers.Serializer):
         login_input = attrs.get('email')  # Now using email field
         password = attrs.get('password')
         
-        print(f"🔐 Login attempt - Input: {login_input}")
+        print(f"Login attempt - Input: {login_input}")
         
         # Try to authenticate directly with the input
         # Since USERNAME_FIELD = 'email', Django will treat this as email
@@ -114,7 +114,7 @@ class LoginSerializer(serializers.Serializer):
         )
         
         if authenticated_user:
-            print(f"✅ Authentication successful for {authenticated_user.email}")
+            print(f"Authentication successful for {authenticated_user.email}")
             attrs['user'] = authenticated_user
             return attrs
         
@@ -128,13 +128,13 @@ class LoginSerializer(serializers.Serializer):
                     password=password
                 )
                 if authenticated_user:
-                    print(f"✅ Authentication successful via username lookup: {authenticated_user.email}")
+                    print(f"Authentication successful via username lookup: {authenticated_user.email}")
                     attrs['user'] = authenticated_user
                     return attrs
         except User.DoesNotExist:
             pass
         
-        print(f"❌ Authentication failed for {login_input}")
+        print(f"Authentication failed for {login_input}")
         raise serializers.ValidationError("Invalid credentials")
 
 class UserProfileSerializer(serializers.ModelSerializer):
